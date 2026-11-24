@@ -1,5 +1,5 @@
 /* CBR Toolkit offline cache. Change VERSION when you update the files so phones fetch the new ones. */
-var VERSION = "cbr-v1";
+var VERSION = "cbr-v2";
 var FILES = ["./", "index.html", "manifest.webmanifest", "web.json", "words.txt", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png"];
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CBR" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0A2A6B</item>
+        <item name="android:navigationBarColor">#0A2A6B</item>
+        <item name="android:windowBackground">#0A2A6B</item>
+    </style>
+</resources>

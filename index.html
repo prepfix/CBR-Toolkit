@@ -354,7 +354,11 @@
   var KEY = "cbr.reader.v1";
   var state = { plan: "year", start: todayKey, lock: "04:00", rate: 1, music: true, musicVol: 0.25, voice: "", done: {}, notes: {}, finished: {} };
   try { var saved = JSON.parse(localStorage.getItem(KEY)); if (saved) for (var sk in saved) state[sk] = saved[sk]; } catch (e) {}
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} pushAndroid(); }
+  /* Android app only: tell the phone lock service the lock time and which days are finished */
+  function pushAndroid() {
+    try { if (window.cbrAndroid) window.cbrAndroid.setState(JSON.stringify({ lock: state.lock || "04:00", finished: state.finished || {} })); } catch (e) {}
+  }
   /* Text size: a bit bigger than before by default, and adjustable (A- / A+) in the reader and Settings */
   function fsNow() { return state.fs || (window.innerWidth < 600 ? 1 : 1.15); }
   function applyFs() {
@@ -374,6 +378,7 @@
     return h("div", { class: "fsrow" }, mk("A−", -0.1, "Smaller text"), mk("A+", 0.1, "Bigger text"), lab);
   }
   applyFs();
+  pushAndroid();
   function idb(cb) { try { var r = indexedDB.open("cbr-text", 1); r.onupgradeneeded = function () { r.result.createObjectStore("kv"); }; r.onsuccess = function () { cb(r.result); }; r.onerror = function () { cb(null); }; } catch (e) { cb(null); } }
   function idbGet(k, cb) { idb(function (db) { if (!db) return cb(null); try { var q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = function () { cb(q.result || null); }; q.onerror = function () { cb(null); }; } catch (e) { cb(null); } }); }
   function idbSet(k, v, cb) { idb(function (db) { if (!db) return cb(false); try { var t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = function () { cb(true); }; t.onerror = function () { cb(false); }; } catch (e) { cb(false); } }); }
@@ -1037,6 +1042,47 @@
         if (R && R.msg) setMsg("Sound device changed. If the voice is not in your earphones, press 🎧 Refresh audio.");
       });
   } catch (e) {}
+
+  /* Android app only: lock bar and emergency code. The real lock is done by the app's background service. */
+  (function androidLockUI() {
+    if (!window.cbrAndroid) return;
+    var bar, msg, em, ov, inp, err;
+    function fmt(ts) { var d = new Date(ts), hr = d.getHours(); return (hr % 12 || 12) + ":" + ("0" + d.getMinutes()).slice(-2) + (hr < 12 ? " AM" : " PM"); }
+    function build() {
+      bar = document.createElement("div");
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;display:none;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;background:#7a1b12;color:#fff;font:600 13px system-ui,sans-serif;text-align:center";
+      msg = document.createElement("span");
+      em = document.createElement("button"); em.textContent = "Emergency";
+      em.style.cssText = "font:600 12px system-ui;background:transparent;color:#ffd08a;border:1px solid #ffd08a;border-radius:8px;padding:4px 10px";
+      bar.appendChild(msg); bar.appendChild(em); document.body.appendChild(bar);
+      ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;z-index:10000;background:rgba(4,18,46,.88);display:none;align-items:center;justify-content:center;padding:16px";
+      ov.innerHTML = '<div style="background:#fff;color:#17212f;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;font:15px system-ui"><strong>Emergency unlock</strong><span style="color:#54627c;font-size:13px">Enter your emergency code. It unlocks the phone for 30 minutes.</span><input type="password" inputmode="numeric" maxlength="8" style="font:inherit;padding:10px;border:1px solid #c9d6ee;border-radius:10px"><div style="color:#b3261e;font-size:13px;min-height:1.2em"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="c" style="font:600 14px system-ui;padding:8px 14px;border-radius:10px;border:1px solid #c9d6ee;background:#fff">Cancel</button><button class="o" style="font:600 14px system-ui;padding:8px 14px;border-radius:10px;border:0;background:#c75c05;color:#fff">Unlock</button></div></div>';
+      document.body.appendChild(ov);
+      inp = ov.querySelector("input"); err = ov.querySelector("div div");
+      em.addEventListener("click", function () { inp.value = ""; err.textContent = ""; ov.style.display = "flex"; inp.focus(); });
+      ov.querySelector(".c").addEventListener("click", function () { ov.style.display = "none"; });
+      ov.querySelector(".o").addEventListener("click", function () {
+        var ok = false; try { ok = window.cbrAndroid.emergency(inp.value); } catch (e) {}
+        if (ok) { ov.style.display = "none"; upd(); } else err.textContent = "That code is not correct.";
+      });
+    }
+    function upd() {
+      var st; try { st = JSON.parse(window.cbrAndroid.status()); } catch (e) { return; }
+      if (!bar) return;
+      if (st.locked) {
+        bar.style.display = "flex"; em.style.display = "";
+        msg.textContent = "🔒 Phone locked. Read a chapter, then write a Fact, an Insight and a Deed (3 sentences each), then press “Finish and unlock”.";
+        document.body.style.paddingTop = "74px";
+      } else if (st.bypassUntil && st.bypassUntil > Date.now()) {
+        bar.style.display = "flex"; em.style.display = "none";
+        msg.textContent = "Emergency unlock active until " + fmt(st.bypassUntil) + ". Finish today's reading before then.";
+        document.body.style.paddingTop = "74px";
+      } else { bar.style.display = "none"; document.body.style.paddingTop = ""; }
+    }
+    function start() { build(); upd(); setInterval(upd, 1500); }
+    if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
+  })();
   function copyText(t, cb) {
     function legacy() {
       var ok = false;

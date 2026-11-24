@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CBR Toolkit</string>
+    <string name="fgs_reason">Keeps the phone locked until the daily Bible reading is finished</string>
+</resources>
